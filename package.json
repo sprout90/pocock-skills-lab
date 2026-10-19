@@ -1,0 +1,25 @@
+{
+  "name": "pocock-skills-lab",
+  "version": "1.0.0",
+  "description": "Reservation lookup API",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "seed": "node src/seed.js",
+    "test": "node --test --test-timeout=180000 test/lookup.unit.test.js test/lookup.integration.test.js",
+    "test:unit": "node --test test/lookup.unit.test.js",
+    "test:integration": "node --test --test-timeout=180000 test/lookup.integration.test.js",
+    "postinstall": "node scripts/hydrate-embedded-postgres.js"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.3.0",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "embedded-postgres": "^18.4.0-beta.17"
+  }
+}
