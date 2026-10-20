@@ -1,49 +1,51 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 import { after, before, beforeEach, test } from 'node:test';
-import EmbeddedPostgres from 'embedded-postgres';
 import pg from 'pg';
 import { applySchema, applySeed } from '../src/database.js';
 import { createPostgresReservationStore } from '../src/reservationStore.js';
 import { getJson, withLookup } from './http.js';
 
-const port = 55432;
-const database = 'reservation_lookup';
+const port = 5432;
+const database = 'reservations_test';
+const host = process.env.PGHOST ?? '127.0.0.1';
+const user = process.env.PGUSER ?? 'postgres';
+const password = process.env.PGPASSWORD ?? '';
 
-let cluster;
-let dataDirectory;
+function connectionString(dbName) {
+  const auth = password
+    ? `${encodeURIComponent(user)}:${encodeURIComponent(password)}`
+    : encodeURIComponent(user);
+  return `postgres://${auth}@${host}:${port}/${dbName}`;
+}
+
 let pool;
 let findReservation;
 
 before(async () => {
-  dataDirectory = await mkdtemp(path.join(tmpdir(), 'reservation-lookup-'));
-  cluster = new EmbeddedPostgres({
-    databaseDir: dataDirectory,
-    user: 'postgres',
-    password: 'password',
-    port,
-    persistent: false,
-    onLog: () => {},
-    onError: () => {},
-  });
-  await cluster.initialise();
-  await cluster.start();
-  await cluster.createDatabase(database);
-  pool = new pg.Pool({
-    connectionString: `postgres://postgres:password@127.0.0.1:${port}/${database}`,
-  });
+  if (!/^[a-z_][a-z0-9_]*$/.test(database)) {
+    throw new Error('Unexpected database name');
+  }
+
+  const admin = new pg.Pool({ connectionString: connectionString('postgres') });
+  try {
+    const existing = await admin.query(
+      'SELECT 1 FROM pg_database WHERE datname = $1',
+      [database],
+    );
+    if (existing.rowCount === 0) {
+      await admin.query(`CREATE DATABASE ${database}`);
+    }
+  } finally {
+    await admin.end();
+  }
+
+  pool = new pg.Pool({ connectionString: connectionString(database) });
   await applySchema(pool);
   findReservation = createPostgresReservationStore(pool).findReservation;
-}, { timeout: 180_000 });
+}, { timeout: 30_000 });
 
 after(async () => {
   await pool?.end();
-  await cluster?.stop();
-  if (dataDirectory) {
-    await rm(dataDirectory, { recursive: true, force: true });
-  }
 });
 
 beforeEach(async () => {
